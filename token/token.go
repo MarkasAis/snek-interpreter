@@ -40,15 +40,15 @@ const (
 	GLOBAL
 	IMPORT
 	FROM
-	EOF // TODO: is this neccessary?
+	INDENT
+	DEDENT
+	EOF
 )
 
 type Token struct {
 	Type    TokenType
 	Literal string
 	Pos     int
-	Line    int
-	Column  int
 }
 
 func (t TokenType) String() string {
@@ -127,6 +127,10 @@ func (t TokenType) String() string {
 		return "DOT"
 	case UNKNOWN:
 		return "UNKNOWN"
+	case INDENT:
+		return "INDENT"
+	case DEDENT:
+		return "DEDENT"
 	case EOF:
 		return "EOF"
 	default:

@@ -1,8 +1,9 @@
 package main
 
 import (
+	"io"
+	"os"
 	"snek/lexer"
-	"snek/parser"
 )
 
 func main() {
@@ -13,17 +14,30 @@ func main() {
 	//     print("Hello")`
 
 	code := `
-pass
-pass
-pass
-`
+def foo(x):
+	return x2 + \
+	1
 
-	lexer0 := lexer.NewLexer(code)
-	lexer0.PrintTokens()
+x = 10
+
+# what
+y = 10`
 
 	lexer := lexer.NewLexer(code)
+	lexer.Tokenize()
+	lexer.PrintTokens()
+
+	for _, msg := range lexer.Errors() {
+		io.WriteString(os.Stdout, "Lexer error: "+msg+"\n")
+	}
+
+	// if match := regexp.MustCompile(`^\s*(#.*)?(\n|$)`).FindString("  # comment\ntest\n"); match != "" {
+	// 	fmt.Print(match)
+	// }
+
+	// lexer := lexer.NewLexer(code)
 	// lexer.PrintTokens()
 
-	parser := parser.New(lexer)
-	parser.ParseProgram()
+	// parser := parser.New(lexer)
+	// parser.ParseProgram()
 }

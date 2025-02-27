@@ -7,11 +7,12 @@ import (
 )
 
 type Lexer struct {
-	input      string
-	pos        int  // Current position in input
-	line       int  // Current line number
-	column     int  // Current column number
-	firstToken bool // Flag to track if we are on the first token
+	input       string
+	pos         int
+	indentStack []int // Tracks indentation levels
+	startOfLine bool  // Tracks if we're at the start of a line
+	tokens      []token.Token
+	errors      []string
 }
 
 var tokenPatterns = []struct {
@@ -43,11 +44,12 @@ var tokenPatterns = []struct {
 	{regexp.MustCompile(`^//`), token.MULT},
 	{regexp.MustCompile(`^[*/%]`), token.MULT},
 	{regexp.MustCompile(`^[a-zA-Z_]\w*`), token.IDENTIFIER},
-	{regexp.MustCompile(`^"([^"\\]*(\\.[^"\\]*)*)"`), token.STRING}, // Matches double-quoted strings
-	{regexp.MustCompile(`^'([^'\\]*(\\.[^'\\]*)*)'`), token.STRING}, // Matches single-quoted strings
-	{regexp.MustCompile(`^\n[ \t]*`), token.NEW_LINE},               // Captures indentation after a newline
-	{regexp.MustCompile(`^\s+`), token.IGNORE},                      // Ignore whitespace
-	{regexp.MustCompile(`^#.*`), token.IGNORE},                      // Ignore comments
+	{regexp.MustCompile(`^"([^"\\]*(\\.[^"\\]*)*)"`), token.STRING},
+	{regexp.MustCompile(`^'([^'\\]*(\\.[^'\\]*)*)'`), token.STRING},
+	{regexp.MustCompile(`^\s*\\\n`), token.IGNORE},
+	{regexp.MustCompile(`^\n`), token.NEW_LINE},
+	{regexp.MustCompile(`^\s+`), token.IGNORE},
+	{regexp.MustCompile(`^#.*`), token.IGNORE},
 	{regexp.MustCompile(`^\(`), token.BRACKET_OPEN},
 	{regexp.MustCompile(`^\)`), token.BRACKET_CLOSE},
 	{regexp.MustCompile(`^\[`), token.SQUARE_BRACKET_OPEN},
@@ -61,99 +63,115 @@ var tokenPatterns = []struct {
 }
 
 func NewLexer(input string) *Lexer {
-	return &Lexer{input: input, pos: 0, line: 0, column: 0, firstToken: true}
+	return &Lexer{
+		input:       input,
+		pos:         0,
+		indentStack: []int{0},
+		startOfLine: true,
+	}
 }
 
-// NextToken retrieves the next token lazily with **correct `Pos` tracking**
-func (l *Lexer) NextToken() token.Token {
-	// If we reached the end of input, return EOF
-	if l.pos >= len(l.input) {
-		return token.Token{Type: token.EOF, Literal: "", Pos: l.pos, Line: l.line, Column: l.column}
+func (l *Lexer) Tokenize() []token.Token {
+	l.tokens = []token.Token{}
+
+	for l.pos < len(l.input) {
+		l.tokenizeNext()
 	}
 
+	// Ensure all dedents are closed at EOF
+	if len(l.indentStack) > 1 {
+		l.tokens = append(l.tokens, token.Token{Type: token.NEW_LINE, Literal: "", Pos: l.pos})
+	}
+
+	for len(l.indentStack) > 1 {
+		l.tokens = append(l.tokens, token.Token{Type: token.DEDENT, Literal: "", Pos: l.pos})
+		l.indentStack = l.indentStack[:len(l.indentStack)-1]
+	}
+
+	l.tokens = append(l.tokens, token.Token{Type: token.EOF, Literal: "", Pos: l.pos})
+	return l.tokens
+}
+
+func (l *Lexer) tokenizeNext() {
 	input := l.input[l.pos:]
 
-	startPos := l.pos
-	startLine := l.line
-	startColumn := l.column
-
-	// Ensure the lexer always starts with a NEW_LINE token (with indentation if present)
-	if l.firstToken {
-		l.firstToken = false
-		initialIndent := regexp.MustCompile(`^[ \t]*`).FindString(input)
-		startPos := l.pos
-		l.pos += len(initialIndent)
-		l.column = len(initialIndent)
-		return token.Token{
-			Type:    token.NEW_LINE,
-			Literal: initialIndent,
-			Pos:     startPos,
-			Line:    startLine,
-			Column:  startColumn,
+	// Handle indentation if we're at the start of a line
+	if l.startOfLine {
+		// Check if line is empty or only contains comment
+		if match := regexp.MustCompile(`^\s*(#.*)?(\n|$)`).FindString(input); match != "" {
+			l.pos += len(match)
+			return
 		}
+
+		// Capture indentation
+		indentation := regexp.MustCompile(`^[ \t]*`).FindString(input)
+		indentLevel := len(indentation)
+
+		// Check indentation changes
+		lastIndent := l.indentStack[len(l.indentStack)-1]
+		if indentLevel > lastIndent {
+			l.indentStack = append(l.indentStack, indentLevel)
+			l.tokens = append(l.tokens, token.Token{Type: token.INDENT, Literal: indentation, Pos: l.pos})
+		} else if indentLevel < lastIndent {
+			for len(l.indentStack) > 1 && indentLevel < l.indentStack[len(l.indentStack)-1] {
+				l.indentStack = l.indentStack[:len(l.indentStack)-1]
+				l.tokens = append(l.tokens, token.Token{Type: token.DEDENT, Literal: "", Pos: l.pos})
+			}
+			if l.indentStack[len(l.indentStack)-1] != indentLevel {
+				l.errors = append(l.errors, "unindent does not match any outer indentation level")
+			}
+		}
+
+		l.pos += indentLevel
+		l.startOfLine = false
+		return
 	}
 
+	// Match token patterns
 	for _, pattern := range tokenPatterns {
 		if match := pattern.regex.FindString(input); match != "" {
 			tokenLength := len(match)
 
-			// Skip ignored tokens like whitespace and comments
+			// Skip ignored tokens
 			if pattern.tType == token.IGNORE {
 				l.pos += tokenLength
-				l.column += tokenLength
-				return l.NextToken()
+				return
 			}
 
-			// Handle new lines
+			l.tokens = append(l.tokens, token.Token{
+				Type:    pattern.tType,
+				Literal: match,
+				Pos:     l.pos,
+			})
+
 			if pattern.tType == token.NEW_LINE {
-				l.line++
-				l.column = tokenLength - 1
-				l.pos += tokenLength
-				return token.Token{
-					Type:    pattern.tType,
-					Literal: match,
-					Pos:     startPos,
-					Line:    startLine,
-					Column:  startColumn,
-				}
+				l.startOfLine = true
 			}
 
 			l.pos += tokenLength
-			l.column += tokenLength
-
-			return token.Token{
-				Type:    pattern.tType,
-				Literal: match,
-				Pos:     startPos,
-				Line:    startLine,
-				Column:  startColumn,
-			}
+			return
 		}
 	}
 
-	// If no match, return an UNKNOWN token
-	startPos = l.pos
-	l.pos++
-	l.column++
-	return token.Token{
+	// Unknown token handling
+	l.tokens = append(l.tokens, token.Token{
 		Type:    token.UNKNOWN,
 		Literal: string(input[0]),
-		Pos:     startPos,
-		Line:    l.line,
-		Column:  startColumn,
-	}
+		Pos:     l.pos,
+	})
+	l.pos++
 }
 
 func (l *Lexer) PrintTokens() {
-	fmt.Println("Pos  | Line | Col  | Type                 | Literal")
+	fmt.Println("Pos  | Type                 | Literal")
 	fmt.Println("-----------------------------------------------------")
 
-	for {
-		tok := l.NextToken()
-		fmt.Printf("%-4d | %-4d | %-4d | %-20s | %q\n",
-			tok.Pos, tok.Line, tok.Column, tok.Type, tok.Literal)
-		if tok.Type == token.EOF {
-			break
-		}
+	for _, tok := range l.tokens {
+		fmt.Printf("%-4d | %-20s | %q\n",
+			tok.Pos, tok.Type, tok.Literal)
 	}
+}
+
+func (p *Lexer) Errors() []string {
+	return p.errors
 }
