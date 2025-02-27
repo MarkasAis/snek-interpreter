@@ -6,15 +6,14 @@ import (
 	"snek/token"
 )
 
-// Lexer struct for lexing input lazily
 type Lexer struct {
-	input  string
-	pos    int // Current position in input
-	line   int // Current line number
-	column int // Current column number
+	input      string
+	pos        int  // Current position in input
+	line       int  // Current line number
+	column     int  // Current column number
+	firstToken bool // Flag to track if we are on the first token
 }
 
-// Token regex patterns
 var tokenPatterns = []struct {
 	regex *regexp.Regexp
 	tType token.TokenType
@@ -61,74 +60,97 @@ var tokenPatterns = []struct {
 	{regexp.MustCompile(`^\S+`), token.UNKNOWN},
 }
 
-// NewLexer initializes a lazy lexer
 func NewLexer(input string) *Lexer {
-	return &Lexer{input: input, pos: 0, line: 1, column: 1}
+	return &Lexer{input: input, pos: 0, line: 0, column: 0, firstToken: true}
 }
 
-// NextToken retrieves the next token lazily with line/column tracking
+// NextToken retrieves the next token lazily with **correct `Pos` tracking**
 func (l *Lexer) NextToken() token.Token {
 	// If we reached the end of input, return EOF
 	if l.pos >= len(l.input) {
-		return token.Token{Type: token.EOF, Literal: "", Pos: l.pos, Line: l.line, Column: l.column - 1}
+		return token.Token{Type: token.EOF, Literal: "", Pos: l.pos, Line: l.line, Column: l.column}
 	}
 
 	input := l.input[l.pos:]
-	startColumn := l.column // Store column before reading token
 
-	// Handle initial indentation on first token
-	if l.pos == 0 {
-		initialIndent := regexp.MustCompile(`^[ \t]+`).FindString(input)
-		if initialIndent != "" {
-			l.pos += len(initialIndent)
-			return token.Token{Type: token.NEW_LINE, Literal: "\n" + initialIndent, Pos: l.pos, Line: l.line, Column: 1}
+	startPos := l.pos
+	startLine := l.line
+	startColumn := l.column
+
+	// Ensure the lexer always starts with a NEW_LINE token (with indentation if present)
+	if l.firstToken {
+		l.firstToken = false
+		initialIndent := regexp.MustCompile(`^[ \t]*`).FindString(input)
+		startPos := l.pos
+		l.pos += len(initialIndent)
+		l.column = len(initialIndent)
+		return token.Token{
+			Type:    token.NEW_LINE,
+			Literal: initialIndent,
+			Pos:     startPos,
+			Line:    startLine,
+			Column:  startColumn,
 		}
 	}
 
-	// Loop through token patterns to find a match
 	for _, pattern := range tokenPatterns {
 		if match := pattern.regex.FindString(input); match != "" {
-			l.pos += len(match)
+			tokenLength := len(match)
 
 			// Skip ignored tokens like whitespace and comments
 			if pattern.tType == token.IGNORE {
+				l.pos += tokenLength
+				l.column += tokenLength
 				return l.NextToken()
 			}
 
-			// Handle new lines properly
+			// Handle new lines
 			if pattern.tType == token.NEW_LINE {
 				l.line++
-				l.column = 1
-			} else {
-				l.column += len(match)
+				l.column = tokenLength - 1
+				l.pos += tokenLength
+				return token.Token{
+					Type:    pattern.tType,
+					Literal: match,
+					Pos:     startPos,
+					Line:    startLine,
+					Column:  startColumn,
+				}
 			}
+
+			l.pos += tokenLength
+			l.column += tokenLength
 
 			return token.Token{
 				Type:    pattern.tType,
 				Literal: match,
-				Pos:     l.pos,
-				Line:    l.line,
+				Pos:     startPos,
+				Line:    startLine,
 				Column:  startColumn,
 			}
 		}
 	}
 
 	// If no match, return an UNKNOWN token
+	startPos = l.pos
 	l.pos++
+	l.column++
 	return token.Token{
 		Type:    token.UNKNOWN,
 		Literal: string(input[0]),
-		Pos:     l.pos - 1,
+		Pos:     startPos,
 		Line:    l.line,
 		Column:  startColumn,
 	}
 }
 
-// Debug function to print tokens lazily with line/column info
 func (l *Lexer) PrintTokens() {
+	fmt.Println("Pos  | Line | Col  | Type                 | Literal")
+	fmt.Println("-----------------------------------------------------")
+
 	for {
 		tok := l.NextToken()
-		fmt.Printf("Pos: %-3d | Line: %-3d | Col: %-3d | %-20s | %q\n",
+		fmt.Printf("%-4d | %-4d | %-4d | %-20s | %q\n",
 			tok.Pos, tok.Line, tok.Column, tok.Type, tok.Literal)
 		if tok.Type == token.EOF {
 			break

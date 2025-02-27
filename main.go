@@ -4,7 +4,8 @@ import "snek/lexer"
 
 func main() {
 	code := `def foo():
-    x = 42
+    x = 42 # comments!!!
+
     if x > 0:
         print("Hello")`
 
