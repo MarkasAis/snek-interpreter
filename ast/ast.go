@@ -12,8 +12,22 @@ func safeString(n Node) string {
 }
 
 type Node interface {
-	// TokenLiteral() string
 	String() string
+}
+
+type SuiteNode struct {
+	Statements []Node
+}
+
+func (n *SuiteNode) String() string {
+	var out bytes.Buffer
+	for i, stmt := range n.Statements {
+		out.WriteString(safeString(stmt))
+		if i < len(n.Statements)-1 {
+			out.WriteString("\n")
+		}
+	}
+	return out.String()
 }
 
 type IdentifierNode struct {
@@ -55,4 +69,10 @@ func (n *InfixNode) String() string {
 	out.WriteString(" ")
 	out.WriteString(safeString(n.Right))
 	return out.String()
+}
+
+type IfNode struct {
+	Condition Node
+	Body      Node
+	Else      Node
 }

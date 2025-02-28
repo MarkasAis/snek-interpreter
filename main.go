@@ -17,7 +17,8 @@ func main() {
 	//     print("Hello")`
 
 	code := `
-x = 10 - 20`
+x = 10 % 20
+y = 3`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
@@ -31,8 +32,12 @@ x = 10 - 20`
 		return
 	}
 
+	fmt.Println("----------")
+
 	p := parser.New(tokens)
 	ast := p.Parse()
+
+	fmt.Println("----------")
 	fmt.Println(ast.String())
 
 	if len(p.Errors()) > 0 {

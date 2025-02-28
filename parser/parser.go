@@ -53,14 +53,19 @@ func New(tokens []token.Token) *Parser {
 		tokens: tokens,
 		pos:    -1,
 		errors: []string{},
+
+		statementFns: make(map[token.TokenType]statementParseFn),
+		prefixFns:    make(map[token.TokenType]prefixParseFn),
+		infixFns:     make(map[token.TokenType]infixParseFn),
 	}
 
-	p.prefixFns = make(map[token.TokenType]prefixParseFn)
+	// p.statementFns[token.IF] = p.parseIfStatement
+
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
 	p.prefixFns[token.NUMBER] = p.parseNumberPrefix
 
-	p.infixFns = make(map[token.TokenType]infixParseFn)
 	p.infixFns[token.SUM] = p.parseInfixExpression
+	p.infixFns[token.PRODUCT] = p.parseInfixExpression
 
 	p.nextToken()
 	p.nextToken()
@@ -68,10 +73,38 @@ func New(tokens []token.Token) *Parser {
 }
 
 func (p *Parser) Parse() ast.Node {
-	return p.parseStatement()
+	return p.parseSuite()
+}
+
+func (p *Parser) parseSuite() ast.Node {
+	statements := []ast.Node{}
+
+	for !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt == nil {
+			break
+		}
+		statements = append(statements, stmt)
+
+		if !p.curTokenIs(token.NEW_LINE) {
+			break
+		}
+		p.nextToken()
+	}
+
+	return &ast.SuiteNode{Statements: statements}
 }
 
 func (p *Parser) parseStatement() ast.Node {
+	stmtParsingFn := p.statementFns[p.curToken.Type]
+	if stmtParsingFn == nil {
+		return p.parseAssignmentStatement()
+	}
+	return stmtParsingFn()
+
+}
+
+func (p *Parser) parseAssignmentStatement() ast.Node {
 	stmt := p.parseExpression(LOWEST)
 	p.nextToken()
 
@@ -80,6 +113,7 @@ func (p *Parser) parseStatement() ast.Node {
 
 		assignment := &ast.AssignmentNode{Target: stmt}
 		assignment.Value = p.parseExpression(LOWEST)
+		p.nextToken()
 		stmt = assignment
 	}
 
