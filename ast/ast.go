@@ -59,17 +59,17 @@ func (w *ASTWriter) String() string {
 	return w.out.String()
 }
 
-type SuiteNode struct {
+type BlockNode struct {
 	Statements []Node
 }
 
-func (n *SuiteNode) String() string {
+func (n *BlockNode) String() string {
 	w := NewASTWriter()
 	n.Write(w)
 	return w.String()
 }
 
-func (n *SuiteNode) Write(w *ASTWriter) {
+func (n *BlockNode) Write(w *ASTWriter) {
 	for _, stmt := range n.Statements {
 		stmt.Write(w)
 	}

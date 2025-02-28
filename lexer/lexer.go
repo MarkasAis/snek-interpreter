@@ -78,10 +78,14 @@ func (l *Lexer) Tokenize() []token.Token {
 		l.tokenizeNext()
 	}
 
-	// Ensure all dedents are closed at EOF
-	if len(l.indentStack) > 1 {
+	if l.tokens[len(l.tokens)-1].Type != token.NEW_LINE {
 		l.tokens = append(l.tokens, token.Token{Type: token.NEW_LINE, Literal: "", Pos: l.pos})
 	}
+
+	// Ensure all dedents are closed at EOF
+	// if len(l.indentStack) > 1 &&  {
+	// 	l.tokens = append(l.tokens, token.Token{Type: token.NEW_LINE, Literal: "", Pos: l.pos})
+	// }
 
 	for len(l.indentStack) > 1 {
 		l.tokens = append(l.tokens, token.Token{Type: token.DEDENT, Literal: "", Pos: l.pos})

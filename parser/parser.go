@@ -63,6 +63,12 @@ func New(tokens []token.Token) *Parser {
 
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
 	p.prefixFns[token.NUMBER] = p.parseNumberPrefix
+	p.prefixFns[token.WHILE] = nil
+	p.prefixFns[token.BREAK] = nil
+	p.prefixFns[token.CONTINUE] = nil
+	p.prefixFns[token.FOR] = nil
+	p.prefixFns[token.DEF] = nil
+	p.prefixFns[token.RETURN] = nil
 
 	p.infixFns[token.SUM] = p.parseInfixExpression
 	p.infixFns[token.PRODUCT] = p.parseInfixExpression
@@ -73,36 +79,95 @@ func New(tokens []token.Token) *Parser {
 }
 
 func (p *Parser) Parse() ast.Node {
-	return p.parseSuite()
+	statements := []ast.Node{}
+
+	for !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.NEW_LINE) {
+			p.nextToken()
+		} else {
+			stmt := p.parseStatement()
+			if stmt == nil {
+				break
+			}
+			statements = append(statements, stmt)
+		}
+	}
+
+	return &ast.BlockNode{Statements: statements}
 }
 
 func (p *Parser) parseSuite() ast.Node {
+	if p.curTokenIs(token.NEW_LINE) {
+		p.nextToken()
+		p.expect(token.INDENT)
+
+		statements := []ast.Node{}
+
+		for !p.curTokenIs(token.DEDENT) {
+			stmt := p.parseStatement()
+			if stmt == nil {
+				break
+			}
+			statements = append(statements, stmt)
+		}
+
+		p.expect(token.DEDENT)
+		return &ast.BlockNode{Statements: statements}
+	}
+
+	stmt := p.parseStatementList()
+	p.expect(token.NEW_LINE)
+	return stmt
+}
+
+func (p *Parser) parseStatement() ast.Node {
+	if p.isCompoundStatement() {
+		return p.parseCompoundStatement()
+	} else {
+		stmt := p.parseStatementList()
+		p.expect(token.NEW_LINE)
+		return stmt
+	}
+}
+
+func (p *Parser) parseSimpleStatement() ast.Node {
+	return p.parseAssignmentStatement()
+}
+
+func (p *Parser) parseCompoundStatement() ast.Node {
+	stmtParsingFn := p.statementFns[p.curToken.Type]
+	if stmtParsingFn == nil {
+		p.errors = append(p.errors, "no statement parse function for "+p.curToken.Type.String())
+		return nil
+	}
+	return stmtParsingFn()
+}
+
+func (p *Parser) parseStatementList() ast.Node {
 	statements := []ast.Node{}
 
-	for !p.curTokenIs(token.EOF) && !p.curTokenIs(token.DEDENT) {
-		stmt := p.parseStatement()
+	for {
+		stmt := p.parseSimpleStatement()
 		if stmt == nil {
 			break
 		}
 		statements = append(statements, stmt)
 
-		if p.curTokenIs(token.NEW_LINE) {
-			p.nextToken()
-		} else {
+		if !p.curTokenIs(token.SEMICOLON) {
 			break
 		}
+		p.nextToken()
 	}
 
-	return &ast.SuiteNode{Statements: statements}
+	return &ast.BlockNode{Statements: statements}
 }
 
-func (p *Parser) parseStatement() ast.Node {
-	stmtParsingFn := p.statementFns[p.curToken.Type]
-	if stmtParsingFn == nil {
-		return p.parseAssignmentStatement()
+func (p *Parser) isCompoundStatement() bool {
+	switch p.curToken.Type {
+	case token.IF, token.WHILE, token.FOR:
+		return true
 	}
-	return stmtParsingFn()
-
+	return false
 }
 
 func (p *Parser) parseIfStatement() ast.Node {
@@ -110,6 +175,7 @@ func (p *Parser) parseIfStatement() ast.Node {
 }
 
 func (p *Parser) parseIfElifStatement(isElif bool) ast.Node {
+	defer untrace(trace("parseIfElifStatement"))
 	stmt := &ast.IfNode{}
 
 	if !isElif {
@@ -121,26 +187,21 @@ func (p *Parser) parseIfElifStatement(isElif bool) ast.Node {
 	stmt.Condition = p.parseExpression(LOWEST)
 
 	p.expect(token.COLON)
-	p.expect(token.NEW_LINE)
-	p.expect(token.INDENT)
 	stmt.Body = p.parseSuite()
-	p.expect(token.DEDENT)
 
 	if p.curTokenIs(token.ELIF) {
 		stmt.Else = p.parseIfElifStatement(true)
 	} else if p.curTokenIs(token.ELSE) {
 		p.nextToken()
 		p.expect(token.COLON)
-		p.expect(token.NEW_LINE)
-		p.expect(token.INDENT)
 		stmt.Else = p.parseSuite()
-		p.expect(token.DEDENT)
 	}
 
 	return stmt
 }
 
 func (p *Parser) parseAssignmentStatement() ast.Node {
+	defer untrace(trace("parseAssignmentStatement"))
 	stmt := p.parseExpression(LOWEST)
 
 	if p.curTokenIs(token.ASSIGN) {

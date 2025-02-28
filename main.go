@@ -16,16 +16,19 @@ func main() {
 	// if x > 0:
 	//     print("Hello")`
 
+	// 	code := `
+	// if 10:
+	// 	x = 10 % 20
+	// 	y = 3
+	// elif 3:
+	// 	z = 1
+	// elif 4:
+	// 	w = 2
+	// else:
+	// 	z = 1`
+
 	code := `
-if 10:
-	x = 10 % 20
-	y = 3
-elif 3:
-	z = 1
-elif 4:
-	w = 2
-else:
-	z = 1`
+if 1: x = 2 ; y = 3`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
