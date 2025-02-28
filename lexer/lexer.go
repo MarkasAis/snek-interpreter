@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"fmt"
 	"regexp"
 	"snek/token"
 )
@@ -58,11 +57,12 @@ var tokenPatterns = []struct {
 	{regexp.MustCompile(`^\}`), token.CURL_BRACE_CLOSE},
 	{regexp.MustCompile(`^,`), token.COMMA},
 	{regexp.MustCompile(`^:`), token.COLON},
+	{regexp.MustCompile(`^;`), token.SEMICOLON},
 	{regexp.MustCompile(`^\.`), token.DOT},
 	{regexp.MustCompile(`^\S+`), token.UNKNOWN},
 }
 
-func NewLexer(input string) *Lexer {
+func New(input string) *Lexer {
 	return &Lexer{
 		input:       input,
 		pos:         0,
@@ -160,16 +160,6 @@ func (l *Lexer) tokenizeNext() {
 		Pos:     l.pos,
 	})
 	l.pos++
-}
-
-func (l *Lexer) PrintTokens() {
-	fmt.Println("Pos  | Type                 | Literal")
-	fmt.Println("-----------------------------------------------------")
-
-	for _, tok := range l.tokens {
-		fmt.Printf("%-4d | %-20s | %q\n",
-			tok.Pos, tok.Type, tok.Literal)
-	}
 }
 
 func (p *Lexer) Errors() []string {

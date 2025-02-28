@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"snek/lexer"
+	"snek/parser"
+	"snek/token"
 )
 
 func main() {
@@ -14,30 +17,31 @@ func main() {
 	//     print("Hello")`
 
 	code := `
-def foo(x):
-	return x2 + \
-	1
+x = 10`
 
-x = 10
+	l := lexer.New(code)
+	tokens := l.Tokenize()
+	PrintTokens(tokens)
 
-# what
-y = 10`
-
-	lexer := lexer.NewLexer(code)
-	lexer.Tokenize()
-	lexer.PrintTokens()
-
-	for _, msg := range lexer.Errors() {
-		io.WriteString(os.Stdout, "Lexer error: "+msg+"\n")
+	if len(l.Errors()) > 0 {
+		io.WriteString(os.Stdout, "Lexer Errors:\n")
+		for _, msg := range l.Errors() {
+			io.WriteString(os.Stdout, "\t- "+msg+"\n")
+		}
+		return
 	}
 
-	// if match := regexp.MustCompile(`^\s*(#.*)?(\n|$)`).FindString("  # comment\ntest\n"); match != "" {
-	// 	fmt.Print(match)
-	// }
+	p := parser.New(tokens)
+	ast := p.Parse()
+	fmt.Print(ast)
+}
 
-	// lexer := lexer.NewLexer(code)
-	// lexer.PrintTokens()
+func PrintTokens(tokens []token.Token) {
+	fmt.Println("Pos  | Type                 | Literal")
+	fmt.Println("-----------------------------------------------------")
 
-	// parser := parser.New(lexer)
-	// parser.ParseProgram()
+	for _, tok := range tokens {
+		fmt.Printf("%-4d | %-20s | %q\n",
+			tok.Pos, tok.Type, tok.Literal)
+	}
 }

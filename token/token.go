@@ -17,6 +17,7 @@ const (
 	CURL_BRACE_CLOSE
 	COMMA
 	COLON
+	SEMICOLON
 	DOT
 	NEW_LINE
 	ASSIGN
@@ -123,6 +124,8 @@ func (t TokenType) String() string {
 		return "COMMA"
 	case COLON:
 		return "COLON"
+	case SEMICOLON:
+		return "SEMICOLON"
 	case DOT:
 		return "DOT"
 	case UNKNOWN:
