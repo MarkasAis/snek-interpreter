@@ -9,12 +9,12 @@ const (
 	IDENTIFIER
 	STRING
 	DEF
-	BRACKET_OPEN
-	BRACKET_CLOSE
-	SQUARE_BRACKET_OPEN
-	SQUARE_BRACKET_CLOSE
-	CURL_BRACE_OPEN
-	CURL_BRACE_CLOSE
+	LPAREN
+	RPAREN
+	LBRACKET
+	RBRACKET
+	LBRACE
+	RBRACE
 	COMMA
 	COLON
 	SEMICOLON
@@ -31,8 +31,8 @@ const (
 	AND
 	NOT
 	COMPARE
-	ADD
-	MULT
+	SUM
+	PRODUCT
 	EXP
 	PASS
 	RETURN
@@ -94,12 +94,12 @@ func (t TokenType) String() string {
 		return "COMPARE"
 	case ASSIGN:
 		return "ASSIGN"
-	case ADD:
-		return "ADD"
+	case SUM:
+		return "SUM"
 	case EXP:
 		return "EXP"
-	case MULT:
-		return "MULT"
+	case PRODUCT:
+		return "PRODUCT"
 	case IDENTIFIER:
 		return "IDENTIFIER"
 	case STRING:
@@ -108,18 +108,18 @@ func (t TokenType) String() string {
 		return "NEW_LINE"
 	case IGNORE:
 		return "IGNORE"
-	case BRACKET_OPEN:
-		return "BRACKET_OPEN"
-	case BRACKET_CLOSE:
-		return "BRACKET_CLOSE"
-	case SQUARE_BRACKET_OPEN:
-		return "SQUARE_BRACKET_OPEN"
-	case SQUARE_BRACKET_CLOSE:
-		return "SQUARE_BRACKET_CLOSE"
-	case CURL_BRACE_OPEN:
-		return "CURL_BRACE_OPEN"
-	case CURL_BRACE_CLOSE:
-		return "CURL_BRACE_CLOSE"
+	case LPAREN:
+		return "LPAREN"
+	case RPAREN:
+		return "RPAREN"
+	case LBRACKET:
+		return "LBRACKET"
+	case RBRACKET:
+		return "RBRACKET"
+	case LBRACE:
+		return "LBRACE"
+	case RBRACE:
+		return "RBRACE"
 	case COMMA:
 		return "COMMA"
 	case COLON:

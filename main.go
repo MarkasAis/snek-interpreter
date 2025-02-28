@@ -17,7 +17,7 @@ func main() {
 	//     print("Hello")`
 
 	code := `
-x = 10`
+x = 10 - 20`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
@@ -33,7 +33,15 @@ x = 10`
 
 	p := parser.New(tokens)
 	ast := p.Parse()
-	fmt.Print(ast)
+	fmt.Println(ast.String())
+
+	if len(p.Errors()) > 0 {
+		io.WriteString(os.Stdout, "Parser Errors:\n")
+		for _, msg := range p.Errors() {
+			io.WriteString(os.Stdout, "\t- "+msg+"\n")
+		}
+		return
+	}
 }
 
 func PrintTokens(tokens []token.Token) {
