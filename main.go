@@ -28,8 +28,10 @@ func main() {
 	// 	z = 1`
 
 	code := `
-while 1: break pass
-else: z = 4`
+while 1: break
+else:
+	if x:
+		z = 2`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
@@ -46,18 +48,16 @@ else: z = 4`
 	fmt.Println("----------")
 
 	p := parser.New(tokens)
-	ast := p.Parse()
+	ast, err := p.Parse()
 
 	fmt.Println("----------")
-	fmt.Println(ast.String())
 
-	if len(p.Errors()) > 0 {
-		io.WriteString(os.Stdout, "Parser Errors:\n")
-		for _, msg := range p.Errors() {
-			io.WriteString(os.Stdout, "\t- "+msg+"\n")
-		}
+	if err != nil {
+		io.WriteString(os.Stdout, "Parse Error: "+err.Error()+"\n")
 		return
 	}
+
+	fmt.Println(ast.String())
 }
 
 func PrintTokens(tokens []token.Token) {
