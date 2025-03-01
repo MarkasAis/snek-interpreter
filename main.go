@@ -28,10 +28,10 @@ func main() {
 	// 	z = 1`
 
 	code := `
-while 1: break
+for i in arr:
+	pass
 else:
-	if x:
-		z = 2`
+	return 1`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()

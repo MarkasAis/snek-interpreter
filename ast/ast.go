@@ -195,3 +195,43 @@ func (n *ControlNode) String() string {
 func (n *ControlNode) Write(w *ASTWriter) {
 	w.WriteLine(n.Type)
 }
+
+type ReturnNode struct {
+	Value Node
+}
+
+func (n *ReturnNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *ReturnNode) Write(w *ASTWriter) {
+	w.WriteLine("return " + safeString(n.Value))
+}
+
+type ForNode struct {
+	Targets Node
+	Values  Node
+	Body    Node
+	Else    Node
+}
+
+func (n *ForNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *ForNode) Write(w *ASTWriter) {
+	w.WriteLine("for " + safeString(n.Targets) + " in " + safeString(n.Values) + ":")
+	w.Indent()
+	n.Body.Write(w)
+	w.Dedent()
+	if n.Else != nil {
+		w.WriteLine("else:")
+		w.Indent()
+		n.Else.Write(w)
+		w.Dedent()
+	}
+}

@@ -70,13 +70,13 @@ func New(tokens []token.Token) *Parser {
 	p.simpleStatementFns[token.PASS] = p.parseControlStatement
 	p.simpleStatementFns[token.BREAK] = p.parseControlStatement
 	p.simpleStatementFns[token.CONTINUE] = p.parseControlStatement
-	p.simpleStatementFns[token.RETURN] = nil
+	p.simpleStatementFns[token.RETURN] = p.parseReturnStatement
 	p.simpleStatementFns[token.IMPORT] = nil
 	p.simpleStatementFns[token.GLOBAL] = nil // TODO: add nonlocal
 
 	p.compundStatementFns[token.DEF] = nil
 	p.compundStatementFns[token.IF] = p.parseIfStatement
-	p.compundStatementFns[token.FOR] = nil
+	p.compundStatementFns[token.FOR] = p.parseForStatement
 	p.compundStatementFns[token.WHILE] = p.parseWhileStatement
 
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
@@ -145,6 +145,7 @@ func (p *Parser) parseStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseSimpleStatements() (ast.Node, error) {
+	defer untrace(trace("simpleStatements"))
 	block := &ast.BlockNode{Statements: []ast.Node{}}
 
 	for !p.curTokenIs(token.NEW_LINE) {
@@ -181,8 +182,26 @@ func (p *Parser) parseSimpleStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseControlStatement() (ast.Node, error) {
+	defer untrace(trace("controlStatement"))
 	stmt := &ast.ControlNode{Type: p.curToken.Literal}
 	p.nextToken()
+	return stmt, nil
+}
+
+func (p *Parser) parseReturnStatement() (ast.Node, error) {
+	defer untrace(trace("returnStatement"))
+
+	if err := p.expect(token.RETURN); err != nil {
+		return nil, err
+	}
+
+	stmt := &ast.ReturnNode{}
+	res, err := p.parseExpression(LOWEST)
+	stmt.Value = res
+	if err != nil {
+		return stmt, err
+	}
+
 	return stmt, nil
 }
 
@@ -196,6 +215,7 @@ func (p *Parser) parseCompoundStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseIfStatement() (ast.Node, error) {
+	defer untrace(trace("ifStatement"))
 	return p.parseIfElifStatement(false)
 }
 
@@ -235,11 +255,7 @@ func (p *Parser) parseIfElifStatement(isElif bool) (ast.Node, error) {
 			return stmt, err
 		}
 	} else if p.curTokenIs(token.ELSE) {
-		p.nextToken()
-		if err := p.expect(token.COLON); err != nil {
-			return stmt, err
-		}
-		res, err := p.parseBlock()
+		res, err := p.parseElseBlock()
 		stmt.Else = res
 		if err != nil {
 			return stmt, err
@@ -274,12 +290,7 @@ func (p *Parser) parseWhileStatement() (ast.Node, error) {
 	}
 
 	if p.curTokenIs(token.ELSE) {
-		p.nextToken()
-		if err := p.expect(token.COLON); err != nil {
-			return stmt, err
-		}
-
-		res, err := p.parseBlock()
+		res, err := p.parseElseBlock()
 		stmt.Else = res
 		if err != nil {
 			return stmt, err
@@ -287,6 +298,68 @@ func (p *Parser) parseWhileStatement() (ast.Node, error) {
 	}
 
 	return stmt, nil
+}
+
+func (p *Parser) parseElseBlock() (ast.Node, error) {
+	defer untrace(trace("elseBlock"))
+	if err := p.expect(token.ELSE); err != nil {
+		return nil, err
+	}
+
+	if err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+
+	return p.parseBlock()
+}
+
+func (p *Parser) parseForStatement() (ast.Node, error) {
+	defer untrace(trace("forStatement"))
+	if err := p.expect(token.FOR); err != nil {
+		return nil, err
+	}
+
+	stmt := &ast.ForNode{}
+	res, err := p.parseTargets()
+	stmt.Targets = res
+	if err != nil {
+		return stmt, err
+	}
+
+	if err := p.expect(token.IN); err != nil {
+		return nil, err
+	}
+
+	res, err = p.parseExpression(LOWEST)
+	stmt.Values = res
+	if err != nil {
+		return stmt, err
+	}
+
+	if err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+
+	res, err = p.parseBlock()
+	stmt.Body = res
+	if err != nil {
+		return stmt, err
+	}
+
+	if p.curTokenIs(token.ELSE) {
+		res, err := p.parseElseBlock()
+		stmt.Else = res
+		if err != nil {
+			return stmt, err
+		}
+	}
+
+	return stmt, nil
+}
+
+func (p *Parser) parseTargets() (ast.Node, error) {
+	defer untrace(trace("targets"))
+	return p.parseExpression(LOWEST) // TODO: implement real version
 }
 
 func (p *Parser) parseAssignmentStatement() (ast.Node, error) {
@@ -340,11 +413,13 @@ func (p *Parser) parseExpression(precedence int) (ast.Node, error) {
 }
 
 func (p *Parser) parseIdentifierPrefix() (ast.Node, error) {
+	defer untrace(trace("identifierPrefix"))
 	defer p.nextToken()
 	return &ast.IdentifierNode{Name: p.curToken.Literal}, nil
 }
 
 func (p *Parser) parseNumberPrefix() (ast.Node, error) {
+	defer untrace(trace("numberPrefix"))
 	defer p.nextToken()
 	return &ast.NumberNode{Value: p.curToken.Literal}, nil
 }
