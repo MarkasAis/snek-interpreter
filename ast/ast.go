@@ -156,3 +156,42 @@ func (n *IfNode) Write(w *ASTWriter) {
 		w.Dedent()
 	}
 }
+
+type WhileNode struct {
+	Condition Node
+	Body      Node
+	Else      Node
+}
+
+func (n *WhileNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *WhileNode) Write(w *ASTWriter) {
+	w.WriteLine("while " + safeString(n.Condition) + ":")
+	w.Indent()
+	n.Body.Write(w)
+	w.Dedent()
+	if n.Else != nil {
+		w.WriteLine("else:")
+		w.Indent()
+		n.Else.Write(w)
+		w.Dedent()
+	}
+}
+
+type ControlNode struct {
+	Type string
+}
+
+func (n *ControlNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *ControlNode) Write(w *ASTWriter) {
+	w.WriteLine(n.Type)
+}

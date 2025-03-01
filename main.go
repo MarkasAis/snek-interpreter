@@ -28,7 +28,8 @@ func main() {
 	// 	z = 1`
 
 	code := `
-if 1: x = 2 ; y = 3`
+while 1: break pass
+else: z = 4`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()

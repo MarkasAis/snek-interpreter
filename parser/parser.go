@@ -60,15 +60,15 @@ func New(tokens []token.Token) *Parser {
 	}
 
 	p.statementFns[token.IF] = p.parseIfStatement
+	p.statementFns[token.WHILE] = p.parseWhileStatement
+	p.statementFns[token.BREAK] = nil
+	p.statementFns[token.CONTINUE] = nil
+	p.statementFns[token.FOR] = nil
+	p.statementFns[token.DEF] = nil
+	p.statementFns[token.RETURN] = nil
 
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
 	p.prefixFns[token.NUMBER] = p.parseNumberPrefix
-	p.prefixFns[token.WHILE] = nil
-	p.prefixFns[token.BREAK] = nil
-	p.prefixFns[token.CONTINUE] = nil
-	p.prefixFns[token.FOR] = nil
-	p.prefixFns[token.DEF] = nil
-	p.prefixFns[token.RETURN] = nil
 
 	p.infixFns[token.SUM] = p.parseInfixExpression
 	p.infixFns[token.PRODUCT] = p.parseInfixExpression
@@ -97,6 +97,7 @@ func (p *Parser) Parse() ast.Node {
 }
 
 func (p *Parser) parseSuite() ast.Node {
+	defer untrace(trace("parseSuite"))
 	if p.curTokenIs(token.NEW_LINE) {
 		p.nextToken()
 		p.expect(token.INDENT)
@@ -121,6 +122,8 @@ func (p *Parser) parseSuite() ast.Node {
 }
 
 func (p *Parser) parseStatement() ast.Node {
+	defer untrace(trace("parseStatement"))
+	fmt.Print(p.curToken.Type)
 	if p.isCompoundStatement() {
 		return p.parseCompoundStatement()
 	} else {
@@ -131,10 +134,18 @@ func (p *Parser) parseStatement() ast.Node {
 }
 
 func (p *Parser) parseSimpleStatement() ast.Node {
+	defer untrace(trace("parseSimpleStatement"))
+	switch p.curToken.Type {
+	case token.PASS, token.BREAK, token.CONTINUE:
+		stmt := ast.ControlNode{Type: p.curToken.Literal}
+		p.nextToken()
+		return &stmt
+	}
 	return p.parseAssignmentStatement()
 }
 
 func (p *Parser) parseCompoundStatement() ast.Node {
+	defer untrace(trace("parseCompoundStatement"))
 	stmtParsingFn := p.statementFns[p.curToken.Type]
 	if stmtParsingFn == nil {
 		p.errors = append(p.errors, "no statement parse function for "+p.curToken.Type.String())
@@ -144,6 +155,7 @@ func (p *Parser) parseCompoundStatement() ast.Node {
 }
 
 func (p *Parser) parseStatementList() ast.Node {
+	defer untrace(trace("parseStatementList"))
 	statements := []ast.Node{}
 
 	for {
@@ -192,6 +204,26 @@ func (p *Parser) parseIfElifStatement(isElif bool) ast.Node {
 	if p.curTokenIs(token.ELIF) {
 		stmt.Else = p.parseIfElifStatement(true)
 	} else if p.curTokenIs(token.ELSE) {
+		p.nextToken()
+		p.expect(token.COLON)
+		stmt.Else = p.parseSuite()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseWhileStatement() ast.Node {
+	defer untrace(trace("parseWhileStatement"))
+	stmt := &ast.WhileNode{}
+
+	p.expect(token.WHILE)
+
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	p.expect(token.COLON)
+	stmt.Body = p.parseSuite()
+
+	if p.curTokenIs(token.ELSE) {
 		p.nextToken()
 		p.expect(token.COLON)
 		stmt.Else = p.parseSuite()
