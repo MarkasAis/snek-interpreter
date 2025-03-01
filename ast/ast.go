@@ -114,6 +114,23 @@ func (n *AssignmentNode) Write(w *ASTWriter) {
 	w.WriteString("\n")
 }
 
+type PrefixNode struct {
+	Operator string
+	Right    Node
+}
+
+func (n *PrefixNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *PrefixNode) Write(w *ASTWriter) {
+	w.WriteString("(" + n.Operator + " ")
+	n.Right.Write(w)
+	w.WriteString(")")
+}
+
 type InfixNode struct {
 	Left     Node
 	Operator string
@@ -127,9 +144,11 @@ func (n *InfixNode) String() string {
 }
 
 func (n *InfixNode) Write(w *ASTWriter) {
+	w.WriteString("(")
 	n.Left.Write(w)
 	w.WriteString(" " + n.Operator + " ")
 	n.Right.Write(w)
+	w.WriteString(")")
 }
 
 type IfNode struct {
@@ -280,4 +299,28 @@ func (n *ParamNode) Write(w *ASTWriter) {
 	if n.DefaultValue != nil {
 		w.WriteString("=" + safeString(n.DefaultValue))
 	}
+}
+
+type CallNode struct {
+	Function Node
+	Args     []Node
+}
+
+func (n *CallNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *CallNode) Write(w *ASTWriter) {
+	w.WriteString(safeString(n.Function) + "(")
+
+	for i, arg := range n.Args {
+		arg.Write(w)
+		if i < len(n.Args)-1 {
+			w.WriteString(", ")
+		}
+	}
+
+	w.WriteString(")")
 }

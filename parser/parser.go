@@ -20,7 +20,8 @@ const (
 	COMPARE
 	SUM
 	PRODUCT
-	CALL
+	PREFIX
+	EXP
 	ATTR
 )
 
@@ -31,8 +32,9 @@ var precedences = map[token.TokenType]int{
 	token.COMPARE:  COMPARE,
 	token.SUM:      SUM,
 	token.PRODUCT:  PRODUCT,
-	token.LPAREN:   CALL,
-	token.LBRACKET: CALL,
+	token.EXP:      EXP,
+	token.LPAREN:   ATTR,
+	token.LBRACKET: ATTR,
 	token.DOT:      ATTR,
 }
 
@@ -81,9 +83,17 @@ func New(tokens []token.Token) *Parser {
 
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
 	p.prefixFns[token.NUMBER] = p.parseNumberPrefix
+	p.prefixFns[token.LPAREN] = p.parseGroupPrefix
+	p.prefixFns[token.SUM] = p.parseExpressionPrefix
 
-	p.infixFns[token.SUM] = p.parseInfixExpression
-	p.infixFns[token.PRODUCT] = p.parseInfixExpression
+	p.infixFns[token.OR] = p.parseExpressionInfix
+	p.infixFns[token.AND] = p.parseExpressionInfix
+	p.infixFns[token.COMPARE] = p.parseExpressionInfix
+	p.infixFns[token.SUM] = p.parseExpressionInfix
+	p.infixFns[token.PRODUCT] = p.parseExpressionInfix
+	p.infixFns[token.EXP] = p.parseExpressionInfix
+	p.infixFns[token.DOT] = p.parseExpressionInfix
+	p.infixFns[token.LPAREN] = p.parseCallInfix
 
 	p.nextToken()
 	p.nextToken()
@@ -524,13 +534,52 @@ func (p *Parser) parseNumberPrefix() (ast.Node, error) {
 	return &ast.NumberNode{Value: p.curToken.Literal}, nil
 }
 
-func (p *Parser) parseInfixExpression(left ast.Node) (ast.Node, error) {
-	defer untrace(trace("infixExpression"))
+func (p *Parser) parseExpressionPrefix() (ast.Node, error) {
+	defer untrace(trace("expressionPrefix"))
+	expression := &ast.PrefixNode{
+		Operator: p.curToken.Literal,
+	}
+	p.nextToken()
+
+	res, err := p.parseExpression(PREFIX)
+	expression.Right = res
+	if err != nil {
+		return expression, err
+	}
+
+	return expression, nil
+}
+
+func (p *Parser) parseGroupPrefix() (ast.Node, error) {
+	defer untrace(trace("groupPrefix"))
+	if !p.curTokenIs(token.LPAREN) {
+		return nil, p.curError(token.LPAREN)
+	}
+
+	p.nextToken()
+	res, err := p.parseExpression(LOWEST)
+	if err != nil {
+		return res, err
+	}
+
+	if err := p.expect(token.RPAREN); err != nil {
+		return res, err
+	}
+
+	return res, nil
+}
+
+func (p *Parser) parseExpressionInfix(left ast.Node) (ast.Node, error) {
+	defer untrace(trace("expressionInfix"))
 	expression := &ast.InfixNode{
 		Operator: p.curToken.Literal,
 		Left:     left,
 	}
 	precedence := getPrecedence(p.curToken.Type)
+	if p.curTokenIs(token.EXP) {
+		precedence -= 1
+	}
+
 	p.nextToken()
 
 	res, err := p.parseExpression(precedence)
@@ -540,6 +589,50 @@ func (p *Parser) parseInfixExpression(left ast.Node) (ast.Node, error) {
 
 	expression.Right = res
 	return expression, nil
+}
+
+func (p *Parser) parseCallInfix(left ast.Node) (ast.Node, error) {
+	defer untrace(trace("callInfix"))
+	expression := &ast.CallNode{
+		Function: left,
+	}
+
+	p.nextToken()
+
+	if !p.curTokenIs(token.RPAREN) {
+		res, err := p.parseArgs()
+		expression.Args = res
+		if err != nil {
+			return expression, err
+		}
+	}
+
+	if err := p.expect(token.RPAREN); err != nil {
+		return expression, err
+	}
+
+	return expression, nil
+}
+
+func (p *Parser) parseArgs() ([]ast.Node, error) {
+	args := []ast.Node{}
+
+	for !p.curTokenIs(token.RPAREN) {
+		res, err := p.parseExpression(LOWEST)
+		if err != nil {
+			return args, err
+		}
+
+		args = append(args, res)
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		} else {
+			break
+		}
+	}
+
+	return args, nil
 }
 
 func (p *Parser) nextToken() {

@@ -28,9 +28,7 @@ func main() {
 	// 	z = 1`
 
 	code := `
-def f(y, z=3):
-	x = y+z
-	return x`
+x**-1`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
