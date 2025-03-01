@@ -28,10 +28,9 @@ func main() {
 	// 	z = 1`
 
 	code := `
-for i in arr:
-	pass
-else:
-	return 1`
+def f(y, z=3):
+	x = y+z
+	return x`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()

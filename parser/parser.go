@@ -74,7 +74,7 @@ func New(tokens []token.Token) *Parser {
 	p.simpleStatementFns[token.IMPORT] = nil
 	p.simpleStatementFns[token.GLOBAL] = nil // TODO: add nonlocal
 
-	p.compundStatementFns[token.DEF] = nil
+	p.compundStatementFns[token.DEF] = p.parseFunctionDef
 	p.compundStatementFns[token.IF] = p.parseIfStatement
 	p.compundStatementFns[token.FOR] = p.parseForStatement
 	p.compundStatementFns[token.WHILE] = p.parseWhileStatement
@@ -181,6 +181,8 @@ func (p *Parser) parseSimpleStatement() (ast.Node, error) {
 	// TODO: parse expression if not assignment
 }
 
+// Simple statement parsers
+
 func (p *Parser) parseControlStatement() (ast.Node, error) {
 	defer untrace(trace("controlStatement"))
 	stmt := &ast.ControlNode{Type: p.curToken.Literal}
@@ -203,6 +205,96 @@ func (p *Parser) parseReturnStatement() (ast.Node, error) {
 	}
 
 	return stmt, nil
+}
+
+// Compound statement parsers
+
+func (p *Parser) parseFunctionDef() (ast.Node, error) {
+	if err := p.expect(token.DEF); err != nil {
+		return nil, err
+	}
+
+	stmt := &ast.FunctionDefNode{}
+	res, err := p.parseIdentifierPrefix()
+	stmt.Name = res
+	if err != nil {
+		return stmt, err
+	}
+
+	if err := p.expect(token.LPAREN); err != nil {
+		return stmt, err
+	}
+
+	params, err := p.parseParams()
+	stmt.Params = params
+	if err != nil {
+		return stmt, err
+	}
+
+	if err := p.expect(token.RPAREN); err != nil {
+		return stmt, err
+	}
+
+	if err := p.expect(token.COLON); err != nil {
+		return stmt, err
+	}
+
+	res, err = p.parseBlock()
+	stmt.Body = res
+	if err != nil {
+		return stmt, err
+	}
+
+	return stmt, nil
+}
+
+func (p *Parser) parseParams() ([]ast.Node, error) {
+	params := []ast.Node{}
+	requireDefault := false
+
+	for !p.curTokenIs(token.RPAREN) {
+		res, err := p.parseParam(requireDefault)
+		if err != nil {
+			return params, err
+		}
+
+		params = append(params, res)
+		if res.DefaultValue != nil {
+			requireDefault = true
+		}
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		} else {
+			break
+		}
+	}
+
+	return params, nil
+}
+
+func (p *Parser) parseParam(requireDefault bool) (*ast.ParamNode, error) {
+	n := &ast.ParamNode{}
+	res, err := p.parseIdentifierPrefix()
+	n.Name = res
+	if err != nil {
+		return n, err
+	}
+
+	if requireDefault && !p.curTokenIs(token.ASSIGN) {
+		return n, p.curError(token.ASSIGN)
+	}
+
+	if p.curTokenIs(token.ASSIGN) {
+		p.nextToken()
+		res, err := p.parseExpression(LOWEST)
+		n.DefaultValue = res
+		if err != nil {
+			return n, err
+		}
+	}
+
+	return n, nil
 }
 
 func (p *Parser) parseCompoundStatement() (ast.Node, error) {
@@ -414,12 +506,20 @@ func (p *Parser) parseExpression(precedence int) (ast.Node, error) {
 
 func (p *Parser) parseIdentifierPrefix() (ast.Node, error) {
 	defer untrace(trace("identifierPrefix"))
+	if !p.curTokenIs(token.IDENTIFIER) {
+		return nil, p.curError(token.IDENTIFIER)
+	}
+
 	defer p.nextToken()
 	return &ast.IdentifierNode{Name: p.curToken.Literal}, nil
 }
 
 func (p *Parser) parseNumberPrefix() (ast.Node, error) {
 	defer untrace(trace("numberPrefix"))
+	if !p.curTokenIs(token.NUMBER) {
+		return nil, p.curError(token.NUMBER)
+	}
+
 	defer p.nextToken()
 	return &ast.NumberNode{Value: p.curToken.Literal}, nil
 }

@@ -235,3 +235,49 @@ func (n *ForNode) Write(w *ASTWriter) {
 		w.Dedent()
 	}
 }
+
+type FunctionDefNode struct {
+	Name   Node
+	Params []Node
+	Body   Node
+}
+
+func (n *FunctionDefNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *FunctionDefNode) Write(w *ASTWriter) {
+	w.WriteString("def " + safeString(n.Name) + "(")
+
+	for i, param := range n.Params {
+		param.Write(w)
+		if i < len(n.Params)-1 {
+			w.WriteString(", ")
+		}
+	}
+
+	w.WriteLine("):")
+	w.Indent()
+	n.Body.Write(w)
+	w.Dedent()
+}
+
+type ParamNode struct {
+	Name         Node
+	DefaultValue Node
+}
+
+func (n *ParamNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *ParamNode) Write(w *ASTWriter) {
+	w.WriteString(safeString(n.Name))
+	if n.DefaultValue != nil {
+		w.WriteString("=" + safeString(n.DefaultValue))
+	}
+}
