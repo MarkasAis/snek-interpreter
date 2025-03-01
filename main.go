@@ -48,7 +48,7 @@ else:
 	fmt.Println("----------")
 
 	p := parser.New(tokens)
-	ast, err := p.Parse()
+	ast, err := p.ParseFile()
 
 	fmt.Println("----------")
 

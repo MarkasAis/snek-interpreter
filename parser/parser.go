@@ -42,15 +42,18 @@ type ParseError struct {
 
 func (e *ParseError) Error() string { return e.Value }
 
+// Reference: https://docs.python.org/3/reference/grammar.html
+
 type Parser struct {
 	tokens    []token.Token
 	pos       int
 	curToken  token.Token
 	peekToken token.Token
 
-	statementFns map[token.TokenType]statementParseFn
-	prefixFns    map[token.TokenType]prefixParseFn
-	infixFns     map[token.TokenType]infixParseFn
+	simpleStatementFns  map[token.TokenType]statementParseFn
+	compundStatementFns map[token.TokenType]statementParseFn
+	prefixFns           map[token.TokenType]prefixParseFn
+	infixFns            map[token.TokenType]infixParseFn
 }
 
 func New(tokens []token.Token) *Parser {
@@ -58,18 +61,23 @@ func New(tokens []token.Token) *Parser {
 		tokens: tokens,
 		pos:    -1,
 
-		statementFns: make(map[token.TokenType]statementParseFn),
-		prefixFns:    make(map[token.TokenType]prefixParseFn),
-		infixFns:     make(map[token.TokenType]infixParseFn),
+		simpleStatementFns:  make(map[token.TokenType]statementParseFn),
+		compundStatementFns: make(map[token.TokenType]statementParseFn),
+		prefixFns:           make(map[token.TokenType]prefixParseFn),
+		infixFns:            make(map[token.TokenType]infixParseFn),
 	}
 
-	p.statementFns[token.IF] = p.parseIfStatement
-	p.statementFns[token.WHILE] = p.parseWhileStatement
-	p.statementFns[token.BREAK] = nil
-	p.statementFns[token.CONTINUE] = nil
-	p.statementFns[token.FOR] = nil
-	p.statementFns[token.DEF] = nil
-	p.statementFns[token.RETURN] = nil
+	p.simpleStatementFns[token.PASS] = p.parseControlStatement
+	p.simpleStatementFns[token.BREAK] = p.parseControlStatement
+	p.simpleStatementFns[token.CONTINUE] = p.parseControlStatement
+	p.simpleStatementFns[token.RETURN] = nil
+	p.simpleStatementFns[token.IMPORT] = nil
+	p.simpleStatementFns[token.GLOBAL] = nil // TODO: add nonlocal
+
+	p.compundStatementFns[token.DEF] = nil
+	p.compundStatementFns[token.IF] = p.parseIfStatement
+	p.compundStatementFns[token.FOR] = nil
+	p.compundStatementFns[token.WHILE] = p.parseWhileStatement
 
 	p.prefixFns[token.IDENTIFIER] = p.parseIdentifierPrefix
 	p.prefixFns[token.NUMBER] = p.parseNumberPrefix
@@ -82,102 +90,64 @@ func New(tokens []token.Token) *Parser {
 	return p
 }
 
-func (p *Parser) Parse() (ast.Node, error) {
+func (p *Parser) ParseFile() (ast.Node, error) {
+	defer untrace(trace("file"))
+	return p.parseStatements(token.EOF)
+}
+
+func (p *Parser) parseBlock() (ast.Node, error) {
+	defer untrace(trace("block"))
+	if p.curTokenIs(token.NEW_LINE) {
+		p.nextToken()
+
+		if err := p.expect(token.INDENT); err != nil {
+			return nil, err
+		}
+
+		res, err := p.parseStatements(token.DEDENT)
+		if err != nil {
+			return res, err
+		}
+
+		if err := p.expect(token.DEDENT); err != nil {
+			return res, err
+		}
+
+		return res, nil
+	}
+
+	return p.parseSimpleStatements()
+}
+
+func (p *Parser) parseStatements(endToken token.TokenType) (ast.Node, error) {
+	defer untrace(trace("statements"))
 	block := &ast.BlockNode{Statements: []ast.Node{}}
 
-	for !p.curTokenIs(token.EOF) {
-		if p.curTokenIs(token.NEW_LINE) {
-			p.nextToken()
-		} else {
-			stmt, err := p.parseStatement()
-			if err != nil {
-				return block, err
-			}
-			block.Statements = append(block.Statements, stmt)
+	for !p.curTokenIs(endToken) {
+		stmt, err := p.parseStatement()
+		if err != nil {
+			return block, err
 		}
+		block.Statements = append(block.Statements, stmt)
+
 	}
 
 	return block, nil
 }
 
-func (p *Parser) parseSuite() (ast.Node, error) {
-	defer untrace(trace("parseSuite"))
-
-	if p.curTokenIs(token.NEW_LINE) {
-		p.nextToken()
-		if err := p.expect(token.INDENT); err != nil {
-			return nil, err
-		}
-
-		block := &ast.BlockNode{Statements: []ast.Node{}}
-
-		for !p.curTokenIs(token.DEDENT) {
-			stmt, err := p.parseStatement()
-			if err != nil {
-				return block, err
-			}
-			block.Statements = append(block.Statements, stmt)
-		}
-
-		if err := p.expect(token.DEDENT); err != nil {
-			return block, err
-		}
-		return block, nil
-	}
-
-	stmt, err := p.parseStatementList()
-	if err != nil {
-		return stmt, err
-	}
-
-	if err := p.expect(token.NEW_LINE); err != nil {
-		return stmt, err
-	}
-
-	return stmt, nil
-}
-
 func (p *Parser) parseStatement() (ast.Node, error) {
-	defer untrace(trace("parseStatement"))
+	defer untrace(trace("statement"))
 	if p.isCompoundStatement() {
 		return p.parseCompoundStatement()
 	} else {
-		stmt, err := p.parseStatementList()
-		if err != nil {
-			return stmt, err
-		}
-		if err := p.expect(token.NEW_LINE); err != nil {
-			return stmt, err
-		}
-		return stmt, nil
+		return p.parseSimpleStatements()
 	}
 }
 
-func (p *Parser) parseSimpleStatement() (ast.Node, error) {
-	defer untrace(trace("parseSimpleStatement"))
-	switch p.curToken.Type {
-	case token.PASS, token.BREAK, token.CONTINUE:
-		stmt := ast.ControlNode{Type: p.curToken.Literal}
-		p.nextToken()
-		return &stmt, nil
-	}
-	return p.parseAssignmentStatement()
-}
-
-func (p *Parser) parseCompoundStatement() (ast.Node, error) {
-	defer untrace(trace("parseCompoundStatement"))
-	stmtParsingFn := p.statementFns[p.curToken.Type]
-	if stmtParsingFn == nil {
-		return nil, &ParseError{Value: fmt.Sprintf("no statement parse function for %s", p.curToken.Type)}
-	}
-	return stmtParsingFn()
-}
-
-func (p *Parser) parseStatementList() (ast.Node, error) {
-	defer untrace(trace("parseStatementList"))
+func (p *Parser) parseSimpleStatements() (ast.Node, error) {
 	block := &ast.BlockNode{Statements: []ast.Node{}}
 
-	for {
+	for !p.curTokenIs(token.NEW_LINE) {
 		stmt, err := p.parseSimpleStatement()
 		if err != nil {
 			return block, err
@@ -190,15 +160,39 @@ func (p *Parser) parseStatementList() (ast.Node, error) {
 		p.nextToken()
 	}
 
+	p.nextToken()
+
+	if len(block.Statements) == 0 {
+		return block, &ParseError{Value: "empty simple statements"}
+	}
+
 	return block, nil
 }
 
-func (p *Parser) isCompoundStatement() bool {
-	switch p.curToken.Type {
-	case token.IF, token.WHILE, token.FOR:
-		return true
+func (p *Parser) parseSimpleStatement() (ast.Node, error) {
+	defer untrace(trace("simpleStatement"))
+	stmtParsingFn := p.simpleStatementFns[p.curToken.Type]
+	if stmtParsingFn != nil {
+		return stmtParsingFn()
 	}
-	return false
+
+	return p.parseAssignmentStatement()
+	// TODO: parse expression if not assignment
+}
+
+func (p *Parser) parseControlStatement() (ast.Node, error) {
+	stmt := &ast.ControlNode{Type: p.curToken.Literal}
+	p.nextToken()
+	return stmt, nil
+}
+
+func (p *Parser) parseCompoundStatement() (ast.Node, error) {
+	defer untrace(trace("compoundStatement"))
+	stmtParsingFn := p.compundStatementFns[p.curToken.Type]
+	if stmtParsingFn == nil {
+		return nil, &ParseError{Value: fmt.Sprintf("no statement parse function for %s", p.curToken.Type)}
+	}
+	return stmtParsingFn()
 }
 
 func (p *Parser) parseIfStatement() (ast.Node, error) {
@@ -206,7 +200,7 @@ func (p *Parser) parseIfStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseIfElifStatement(isElif bool) (ast.Node, error) {
-	defer untrace(trace("parseIfElifStatement"))
+	defer untrace(trace("ifElifStatement"))
 	stmt := &ast.IfNode{}
 
 	startToken := token.IF
@@ -228,7 +222,7 @@ func (p *Parser) parseIfElifStatement(isElif bool) (ast.Node, error) {
 		return stmt, err
 	}
 
-	res, err = p.parseSuite()
+	res, err = p.parseBlock()
 	stmt.Body = res
 	if err != nil {
 		return stmt, err
@@ -245,7 +239,7 @@ func (p *Parser) parseIfElifStatement(isElif bool) (ast.Node, error) {
 		if err := p.expect(token.COLON); err != nil {
 			return stmt, err
 		}
-		res, err := p.parseSuite()
+		res, err := p.parseBlock()
 		stmt.Else = res
 		if err != nil {
 			return stmt, err
@@ -256,7 +250,7 @@ func (p *Parser) parseIfElifStatement(isElif bool) (ast.Node, error) {
 }
 
 func (p *Parser) parseWhileStatement() (ast.Node, error) {
-	defer untrace(trace("parseWhileStatement"))
+	defer untrace(trace("whileStatement"))
 	stmt := &ast.WhileNode{}
 
 	if err := p.expect(token.WHILE); err != nil {
@@ -273,7 +267,7 @@ func (p *Parser) parseWhileStatement() (ast.Node, error) {
 		return stmt, err
 	}
 
-	res, err = p.parseSuite()
+	res, err = p.parseBlock()
 	stmt.Body = res
 	if err != nil {
 		return stmt, err
@@ -285,7 +279,7 @@ func (p *Parser) parseWhileStatement() (ast.Node, error) {
 			return stmt, err
 		}
 
-		res, err := p.parseSuite()
+		res, err := p.parseBlock()
 		stmt.Else = res
 		if err != nil {
 			return stmt, err
@@ -296,7 +290,7 @@ func (p *Parser) parseWhileStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseAssignmentStatement() (ast.Node, error) {
-	defer untrace(trace("parseAssignmentStatement"))
+	defer untrace(trace("assignmentStatement"))
 	stmt, err := p.parseExpression(LOWEST)
 	if err != nil {
 		return stmt, err
@@ -319,7 +313,7 @@ func (p *Parser) parseAssignmentStatement() (ast.Node, error) {
 }
 
 func (p *Parser) parseExpression(precedence int) (ast.Node, error) {
-	defer untrace(trace("parseExpression"))
+	defer untrace(trace("expression"))
 	prefix := p.prefixFns[p.curToken.Type]
 	if prefix == nil {
 		return nil, &ParseError{Value: fmt.Sprintf("no prefix parse function for %s", p.curToken.Type.String())}
@@ -356,7 +350,7 @@ func (p *Parser) parseNumberPrefix() (ast.Node, error) {
 }
 
 func (p *Parser) parseInfixExpression(left ast.Node) (ast.Node, error) {
-	defer untrace(trace("parseInfixExpression"))
+	defer untrace(trace("infixExpression"))
 	expression := &ast.InfixNode{
 		Operator: p.curToken.Literal,
 		Left:     left,
@@ -406,4 +400,9 @@ func getPrecedence(tok token.TokenType) int {
 		return p
 	}
 	return LOWEST
+}
+
+func (p *Parser) isCompoundStatement() bool {
+	_, ok := p.compundStatementFns[p.curToken.Type]
+	return ok
 }
