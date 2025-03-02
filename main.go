@@ -10,25 +10,8 @@ import (
 )
 
 func main() {
-	// code := `def foo():
-	// x = 42 # comments!!!
-
-	// if x > 0:
-	//     print("Hello")`
-
-	// 	code := `
-	// if 10:
-	// 	x = 10 % 20
-	// 	y = 3
-	// elif 3:
-	// 	z = 1
-	// elif 4:
-	// 	w = 2
-	// else:
-	// 	z = 1`
-
 	code := `
-x**-1`
+x[1+2][2] -= 3`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()

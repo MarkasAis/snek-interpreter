@@ -94,6 +94,7 @@ func New(tokens []token.Token) *Parser {
 	p.infixFns[token.EXP] = p.parseExpressionInfix
 	p.infixFns[token.DOT] = p.parseExpressionInfix
 	p.infixFns[token.LPAREN] = p.parseCallInfix
+	p.infixFns[token.LBRACKET] = p.parseSlicesInfix
 
 	p.nextToken()
 	p.nextToken()
@@ -187,8 +188,33 @@ func (p *Parser) parseSimpleStatement() (ast.Node, error) {
 		return stmtParsingFn()
 	}
 
-	return p.parseAssignmentStatement()
-	// TODO: parse expression if not assignment
+	startPos := p.pos
+	if res, err := p.parseAssignmentStatement(); err == nil {
+		return res, nil
+	}
+
+	p.pos = startPos
+	return p.parseExpressions(token.NEW_LINE) // TODO: not valid!
+}
+
+func (p *Parser) parseExpressions(endToken token.TokenType) (ast.Node, error) {
+	defer untrace(trace("expressions"))
+	n := &ast.ExpressionsNode{}
+
+	for !p.curTokenIs(endToken) {
+		res, err := p.parseExpression(LOWEST)
+		if err != nil {
+			return n, err
+		}
+
+		n.Expressions = append(n.Expressions, res)
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	return n, nil
 }
 
 // Simple statement parsers
@@ -472,9 +498,10 @@ func (p *Parser) parseAssignmentStatement() (ast.Node, error) {
 	}
 
 	if p.curTokenIs(token.ASSIGN) {
+		assignment := &ast.AssignmentNode{Target: stmt, Operator: p.curToken.Literal}
+
 		p.nextToken()
 
-		assignment := &ast.AssignmentNode{Target: stmt}
 		res, err := p.parseExpression(LOWEST)
 		assignment.Value = res
 		if err != nil {
@@ -615,6 +642,7 @@ func (p *Parser) parseCallInfix(left ast.Node) (ast.Node, error) {
 }
 
 func (p *Parser) parseArgs() ([]ast.Node, error) {
+	defer untrace(trace("args"))
 	args := []ast.Node{}
 
 	for !p.curTokenIs(token.RPAREN) {
@@ -633,6 +661,25 @@ func (p *Parser) parseArgs() ([]ast.Node, error) {
 	}
 
 	return args, nil
+}
+
+func (p *Parser) parseSlicesInfix(left ast.Node) (ast.Node, error) { // TODO: support [a:b:c]
+	defer untrace(trace("slicesInfix"))
+	n := &ast.SliceNode{Left: left}
+
+	p.nextToken()
+
+	res, err := p.parseExpression(LOWEST)
+	n.Index = res
+	if err != nil {
+		return n, err
+	}
+
+	if err := p.expect(token.RBRACKET); err != nil {
+		return n, err
+	}
+
+	return n, nil
 }
 
 func (p *Parser) nextToken() {

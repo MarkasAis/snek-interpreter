@@ -96,8 +96,9 @@ func (n *NumberNode) Write(w *ASTWriter) {
 }
 
 type AssignmentNode struct {
-	Target Node
-	Value  Node
+	Target   Node
+	Operator string
+	Value    Node
 }
 
 func (n *AssignmentNode) String() string {
@@ -109,7 +110,7 @@ func (n *AssignmentNode) String() string {
 func (n *AssignmentNode) Write(w *ASTWriter) {
 	w.writeIndent()
 	n.Target.Write(w)
-	w.WriteString(" = ")
+	w.WriteString(" " + n.Operator + " ")
 	n.Value.Write(w)
 	w.WriteString("\n")
 }
@@ -323,4 +324,40 @@ func (n *CallNode) Write(w *ASTWriter) {
 	}
 
 	w.WriteString(")")
+}
+
+type SliceNode struct {
+	Left  Node
+	Index Node
+}
+
+func (n *SliceNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *SliceNode) Write(w *ASTWriter) {
+	w.WriteString(safeString(n.Left) + "[")
+	n.Index.Write(w)
+	w.WriteString("]")
+}
+
+type ExpressionsNode struct {
+	Expressions []Node
+}
+
+func (n *ExpressionsNode) String() string {
+	w := NewASTWriter()
+	n.Write(w)
+	return w.String()
+}
+
+func (n *ExpressionsNode) Write(w *ASTWriter) {
+	for i, exp := range n.Expressions {
+		exp.Write(w)
+		if i < len(n.Expressions)-1 {
+			w.WriteString(", ")
+		}
+	}
 }
