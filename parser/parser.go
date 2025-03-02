@@ -193,18 +193,24 @@ func (p *Parser) parseSimpleStatement() (ast.Node, error) {
 		return res, nil
 	}
 
-	p.pos = startPos
-	return p.parseExpressions(token.NEW_LINE) // TODO: not valid!
+	p.setPos(startPos)
+	return p.parseExpressions()
 }
 
-func (p *Parser) parseExpressions(endToken token.TokenType) (ast.Node, error) {
+func (p *Parser) parseExpressions() (ast.Node, error) {
 	defer untrace(trace("expressions"))
 	n := &ast.ExpressionsNode{}
 
-	for !p.curTokenIs(endToken) {
+	for {
+		startPos := p.pos
 		res, err := p.parseExpression(LOWEST)
 		if err != nil {
-			return n, err
+			if len(n.Expressions) == 0 { // Must not be empty
+				return n, err
+			} else {
+				p.setPos(startPos)
+				break
+			}
 		}
 
 		n.Expressions = append(n.Expressions, res)
@@ -497,25 +503,27 @@ func (p *Parser) parseAssignmentStatement() (ast.Node, error) {
 		return stmt, err
 	}
 
-	if p.curTokenIs(token.ASSIGN) {
-		assignment := &ast.AssignmentNode{Target: stmt, Operator: p.curToken.Literal}
-
-		p.nextToken()
-
-		res, err := p.parseExpression(LOWEST)
-		assignment.Value = res
-		if err != nil {
-			return stmt, err
-		}
-
-		stmt = assignment
+	if !p.curTokenIs(token.ASSIGN) {
+		return stmt, p.curError(token.ASSIGN)
 	}
+
+	assignment := &ast.AssignmentNode{Target: stmt, Operator: p.curToken.Literal}
+	p.nextToken()
+
+	res, err := p.parseExpression(LOWEST)
+	assignment.Value = res
+	if err != nil {
+		return stmt, err
+	}
+
+	stmt = assignment
 
 	return stmt, nil
 }
 
 func (p *Parser) parseExpression(precedence int) (ast.Node, error) {
 	defer untrace(trace("expression"))
+
 	prefix := p.prefixFns[p.curToken.Type]
 	if prefix == nil {
 		return nil, &ParseError{Value: fmt.Sprintf("no prefix parse function for %s", p.curToken.Type.String())}
@@ -690,6 +698,12 @@ func (p *Parser) nextToken() {
 		return
 	}
 
+	p.peekToken = p.tokens[p.pos]
+}
+
+func (p *Parser) setPos(index int) {
+	p.pos = index
+	p.curToken = p.tokens[p.pos-1]
 	p.peekToken = p.tokens[p.pos]
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"snek/evaluator"
 	"snek/lexer"
 	"snek/parser"
 	"snek/token"
@@ -11,7 +12,7 @@ import (
 
 func main() {
 	code := `
-x[1+2][2] -= 3`
+3`
 
 	l := lexer.New(code)
 	tokens := l.Tokenize()
@@ -36,6 +37,10 @@ x[1+2][2] -= 3`
 		io.WriteString(os.Stdout, "Parse Error: "+err.Error()+"\n")
 		return
 	}
+
+	evaluator.DebugPrint(ast, 0)
+
+	fmt.Println("----------")
 
 	fmt.Println(ast.String())
 }
